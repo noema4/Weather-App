@@ -105,7 +105,7 @@ def get_weather(location: str="Уфа, Башкортостан", lang: str="ru"
     "Accept": "application/json"
     }
 
-    response = requests.get(url, timeout=3, headers=headers)
+    response = requests.get(url, timeout=10, headers=headers)
     response.raise_for_status() 
     return response.json()
 
@@ -116,11 +116,14 @@ def get_weather_image(location: str, lang: str) -> bytes:
     url = f"https://wttr.in/{encoded_location}.png?m&lang={lang}"
     headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    "Accept": "application/json"
     }
 
-    response = requests.get(url, headers=headers, timeout=6)
+    response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
+
+    content_type = response.headers.get("Content-Type", "")
+    if "image" not in content_type:
+        raise ValueError(f"Сервер вернул не картинку: {content_type}")
     return response.content
 
 # --Интерфейс--
@@ -185,7 +188,7 @@ if location:
                 img_bytes = get_weather_image(location=location, lang=lang_code)
                 st.image(img_bytes, caption=f"{t['weather_in']} {location.title()}")
             except Exception as e:
-                st.warning(t["err_img"])
+                st.warning(f"{t["err_img"]}: {e}")
 
     except (ConnectionError, Timeout):
         st.error("[X] Ошибка сети или превышено время ожидания.")
