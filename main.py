@@ -15,7 +15,7 @@ st.markdown("""
     <style>
     /* Ограничение ширины всего контента */
     .block-container {
-        max-width: 1200px !important;
+        max-width: 1100px !important;
     }
     /* Карточки метрик */
     div[data-testid="stMetric"] {
