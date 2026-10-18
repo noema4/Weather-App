@@ -177,8 +177,8 @@ if location:
         st.markdown("---")
 
         # Блок 3: Рассвет/Закат 
-        col6, col7 = st.columns([2,1])
-        col6.metric(label=t["sun_cycle"], value=f"🌅 {sunrise} / 🌇 {sunset}")
+        col6, col7 = st.columns(2)
+        col6.metric(label=t["sun_cycle"], value=f"{sunrise} / {sunset}")
         col7.metric(label=t["visibility"], value=f"{visibility} {t['km']}")
 
         st.markdown("---")
