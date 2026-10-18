@@ -195,7 +195,7 @@ if location:
                 st.caption(f"{t['weather_in']} {location.title()}")
 
             except Exception as e:
-                st.error(f"[x] {t["err_img"]}: {e}")
+                st.error(f"[x] {t['err_img']}: {e}")
 
     except (ConnectionError, Timeout):
         st.error("[X] Ошибка сети или превышено время ожидания.")
