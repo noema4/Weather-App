@@ -7,7 +7,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Weather App",
     page_icon="🛰️",
-    layout='centered'
+    layout='wide'
 )
 
 # CSS
