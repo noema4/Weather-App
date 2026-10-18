@@ -13,6 +13,10 @@ st.set_page_config(
 # CSS
 st.markdown("""
     <style>
+    /* Ограничение ширины всего контента */
+    .block-container {
+        max-width: 1200px !important;
+    }
     /* Карточки метрик */
     div[data-testid="stMetric"] {
         border: 1px solid rgba(128, 128, 128, 0.3) !important;
