@@ -1,4 +1,5 @@
 import requests
+import base64
 from requests.exceptions import ConnectionError, HTTPError, Timeout, RequestException
 import streamlit as st
 
@@ -186,7 +187,13 @@ if location:
         if st.checkbox(t["show_img"]):
             try:
                 img_bytes = get_weather_image(location=location, lang=lang_code)
-                st.image(img_bytes, caption=f"{t['weather_in']} {location.title()}")
+                img_b64 = base64.b64encode(img_bytes).decode()
+                st.markdown(
+                    f'<img src="data:image/png;base64,{img_b64}" style="width:100%">',
+                    unsafe_allow_html=True,
+                )
+                st.caption(f"{t['weather_in']} {location.title()}")
+
             except Exception as e:
                 st.error(f"[x] {t["err_img"]}: {e}")
 
