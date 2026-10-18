@@ -120,11 +120,11 @@ def get_weather_image(location: str, lang: str) -> bytes:
 
     response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
+    
+    if not response.headers.get("Content-Type", "").startswith("image"):
+        raise ValueError("Сервер не вернул картинку")
 
-    content_type = response.headers.get("Content-Type", "")
-    if "image" not in content_type:
-        raise ValueError(f"Сервер вернул не картинку: {content_type}")
-    return response.content
+       return response.content
 
 # --Интерфейс--
 selected_lang = st.sidebar.selectbox("Язык / Language", list(LANGUAGES.keys()))
@@ -188,7 +188,7 @@ if location:
                 img_bytes = get_weather_image(location=location, lang=lang_code)
                 st.image(img_bytes, caption=f"{t['weather_in']} {location.title()}")
             except Exception as e:
-                st.warning(f"{t["err_img"]}: {e}")
+                st.error(f"[x] {t["err_img"]}: {e}")
 
     except (ConnectionError, Timeout):
         st.error("[X] Ошибка сети или превышено время ожидания.")
