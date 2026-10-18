@@ -124,7 +124,7 @@ def get_weather_image(location: str, lang: str) -> bytes:
     if not response.headers.get("Content-Type", "").startswith("image"):
         raise ValueError("Сервер не вернул картинку")
 
-       return response.content
+    return response.content
 
 # --Интерфейс--
 selected_lang = st.sidebar.selectbox("Язык / Language", list(LANGUAGES.keys()))
