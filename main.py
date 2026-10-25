@@ -1,5 +1,7 @@
+from datetime import datetime
+from urllib.parse import quote
+
 import requests
-import base64
 from requests.exceptions import ConnectionError, HTTPError, Timeout, RequestException
 import streamlit as st
 
@@ -39,6 +41,7 @@ TEXTS = {
     "ru": {
         "title": "🛰️ Прогноз погоды",
         "enter_city": "Введите название города ниже:",
+        "default_city": "Уфа, Башкортостан",
         "weather_in": "Погода в городе",
         "city_hint": "💡 Указывайте город с регионом или страной (например: «Уфа, Башкортостан»), иначе сервис может выдать одноименный город из другой страны.",
         "desc": "Состояние",
@@ -50,6 +53,9 @@ TEXTS = {
         "rain_chance": "Вероятность дождя",
         "sun_cycle": "Рассвет / Закат",
         "err_city": "Введите корректное название города",
+        "err_network": "Ошибка сети или превышено время ожидания.",
+        "err_api": "Сервис погоды временно недоступен. Попробуйте позже.",
+        "err_data": "Не удалось разобрать ответ сервиса погоды.",
         "err_img": "Не удалось загрузить изображение погоды",
         "show_img": "Показать графический прогноз",
         "kmh": "км/ч",
@@ -58,6 +64,7 @@ TEXTS = {
     "en": {
         "title": "🛰️ Weather Forecast",
         "enter_city": "Enter city name below:",
+        "default_city": "Ufa, Bashkortostan",
         "city_hint": "💡 Specify the city with region or country (e.g. 'Ufa, Bashkortostan'), otherwise the service might pick another location with the same name.",
         "weather_in": "Weather in",
         "desc": "Condition",
@@ -69,6 +76,9 @@ TEXTS = {
         "rain_chance": "Rain chance",
         "sun_cycle": "Sunrise / Sunset",
         "err_city": "Please enter a valid city name",
+        "err_network": "Network error or request timed out.",
+        "err_api": "The weather service is temporarily unavailable. Please try again later.",
+        "err_data": "Failed to parse the weather service response.",
         "err_img": "Failed to load weather image",
         "show_img": "Show visual forecast image",
         "kmh": "km/h",
@@ -77,6 +87,7 @@ TEXTS = {
     "de": {
         "title": "🛰️ Wettervorhersage",
         "enter_city": "Geben Sie unten den Stadtnamen ein:",
+        "default_city": "Ufa, Baschkortostan",
         "city_hint": "💡 Geben Sie die Stadt mit Region oder Land an (z. B. „Ufa, Baschkortostan“), da sonst ein anderer Ort gewählt werden kann.",
         "weather_in": "Wetter in",
         "desc": "Zustand",
@@ -88,6 +99,9 @@ TEXTS = {
         "rain_chance": "Regenwahrscheinlichkeit",
         "sun_cycle": "Sonnenaufgang / -untergang",
         "err_city": "Bitte geben Sie einen gültigen Stadtnamen ein",
+        "err_network": "Netzwerkfehler oder Zeitüberschreitung.",
+        "err_api": "Der Wetterdienst ist vorübergehend nicht verfügbar. Bitte später erneut versuchen.",
+        "err_data": "Die Antwort des Wetterdienstes konnte nicht verarbeitet werden.",
         "err_img": "Wetterbild konnte nicht geladen werden",
         "show_img": "Grafische Vorhersage anzeigen",
         "kmh": "km/h",
@@ -95,30 +109,82 @@ TEXTS = {
     }
 }
 
+def _nearest_hourly(days: list[dict], observation_time: str) -> dict | None:
+    """Возвращает часовой слот, ближайший к времени наблюдения."""
+    try:
+        raw_time = observation_time.strip()
+    except AttributeError:
+        return None
+
+    observed = None
+    for time_format in ("%I:%M %p", "%H:%M"):
+        try:
+            observed = datetime.strptime(raw_time, time_format)
+            break
+        except ValueError:
+            continue
+    if observed is None:
+        return None
+
+    observed_minutes = observed.hour * 60 + observed.minute
+    nearest = None
+    nearest_key = None
+
+    for day_index, day in enumerate(days):
+        for hourly in day.get("hourly", []):
+            try:
+                slot_time = int(hourly["time"])
+            except (KeyError, TypeError, ValueError):
+                continue
+
+            slot_minutes = (
+                day_index * 24 * 60
+                + (slot_time // 100) * 60
+                + slot_time % 100
+            )
+            key = (
+                abs(slot_minutes - observed_minutes),
+                slot_minutes < observed_minutes,
+            )
+            if nearest_key is None or key < nearest_key:
+                nearest = hourly
+                nearest_key = key
+
+    return nearest
+
+
+def _weather_image_url(location: str, lang: str) -> str:
+    """Возвращает URL PNG-прогноза для указанного города."""
+    encoded_location = quote(location.strip(), safe="")
+    encoded_lang = quote(lang, safe="")
+    return f"https://wttr.in/{encoded_location}.png?m=&lang={encoded_lang}"
+
+
 # --Кэшируемые функции--
 @st.cache_data(ttl=900) # запрос остаётся в кэше 900 секунд (15 минут)
-def get_weather(location: str="Уфа, Башкортостан", lang: str="ru") -> None:
-    """"
-    Функция получает данные из указанного города (по умолчанию: Уфа)
+def get_weather(location: str, lang: str) -> dict:
+    """
+    Получает данные о погоде для указанного города.
     :param location: Название города
     :param lang: Язык вывода
     """
     
-    url = f"https://wttr.in/{location}?lang={lang}&format=j1"
+    encoded_location = quote(location.strip(), safe="")
+    url = f"https://wttr.in/{encoded_location}"
+    params = {"lang": lang, "format": "j1"}
     headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     "Accept": "application/json"
     }
 
-    response = requests.get(url, timeout=10, headers=headers)
+    response = requests.get(url, params=params, timeout=10, headers=headers)
     response.raise_for_status() 
     return response.json()
 
 @st.cache_data(ttl=900)
 def get_weather_image(location: str, lang: str) -> bytes:      
     """Отдельная функция для загрузки PNG-картинки с погодой"""
-    encoded_location = location.replace(" ", "+")
-    url = f"https://wttr.in/{encoded_location}.png?m&lang={lang}"
+    url = _weather_image_url(location, lang)
     headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
@@ -134,11 +200,15 @@ def get_weather_image(location: str, lang: str) -> bytes:
 # --Интерфейс--
 selected_lang = st.sidebar.selectbox("Язык / Language", list(LANGUAGES.keys()))
 lang_code = LANGUAGES[selected_lang]
-t=TEXTS.get(lang_code)
+t = TEXTS.get(lang_code, TEXTS["ru"])
 
 st.title(t['title'])
 st.markdown(f"### {t['enter_city']}")
-location = st.text_input("", value="Уфа, Башкортостан")
+location = st.text_input(
+    t["enter_city"],
+    value=t["default_city"],
+    label_visibility="collapsed",
+)
 st.caption(t["city_hint"]) # Вывод понятной подсказки под полем ввода
   
 if location:
@@ -147,7 +217,10 @@ if location:
         current = data["current_condition"][0]
 
         lang_key = f"lang_{lang_code}"
-        chance_of_rain = data["weather"][0]["hourly"][0]["chanceofrain"]
+        hourly = _nearest_hourly(
+            data["weather"], current.get("observation_time", "")
+        ) or data["weather"][0]["hourly"][0]
+        chance_of_rain = hourly["chanceofrain"]
         sunrise = data["weather"][0]["astronomy"][0]["sunrise"]
         sunset = data["weather"][0]["astronomy"][0]["sunset"]
         feels_like = current["FeelsLikeC"]
@@ -191,17 +264,28 @@ if location:
         if st.checkbox(t["show_img"]):
             try:
                 img_bytes = get_weather_image(location=location, lang=lang_code)
-                img_b64 = base64.b64encode(img_bytes).decode()
-                st.markdown(
-                    f'<img src="data:image/png;base64,{img_b64}" style="width:100%">',
-                    unsafe_allow_html=True,
+                st.image(
+                    img_bytes,
+                    caption=f"{t['weather_in']} {location.title()}",
+                    width="stretch",
                 )
-                st.caption(f"{t['weather_in']} {location.title()}")
-
-            except Exception as e:
-                st.error(f"[x] {t['err_img']}: {e}")
+            except (ConnectionError, Timeout):
+                st.error(f"[X] {t['err_network']}")
+            except (HTTPError, RequestException, ValueError):
+                st.error(f"[X] {t['err_img']}")
 
     except (ConnectionError, Timeout):
-        st.error("[X] Ошибка сети или превышено время ожидания.")
-    except (HTTPError, RequestException, KeyError):
-        st.error(f"[X] {t['err_city']}")
+        st.error(f"[X] {t['err_network']}")
+    except HTTPError as exc:
+        response = exc.response
+        if response is not None and (
+            response.status_code == 404
+            or "location not found" in response.text.lower()
+        ):
+            st.error(f"[X] {t['err_city']}")
+        else:
+            st.error(f"[X] {t['err_api']}")
+    except RequestException:
+        st.error(f"[X] {t['err_api']}")
+    except (KeyError, IndexError, TypeError):
+        st.error(f"[X] {t['err_data']}")
