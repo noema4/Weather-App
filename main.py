@@ -42,7 +42,7 @@ TEXTS = {
         "title": "🛰️ Прогноз погоды",
         "enter_city": "Введите название города ниже:",
         "default_city": "Уфа, Башкортостан",
-        "weather_in": "Погода в городе",
+        "location_label": "Местоположение",
         "city_hint": "💡 Указывайте город с регионом или страной (например: «Уфа, Башкортостан»), иначе сервис может выдать одноименный город из другой страны.",
         "desc": "Состояние",
         "wind": "Ветер",
@@ -65,8 +65,8 @@ TEXTS = {
         "title": "🛰️ Weather Forecast",
         "enter_city": "Enter city name below:",
         "default_city": "Ufa, Bashkortostan",
+        "location_label": "Location",
         "city_hint": "💡 Specify the city with region or country (e.g. 'Ufa, Bashkortostan'), otherwise the service might pick another location with the same name.",
-        "weather_in": "Weather in",
         "desc": "Condition",
         "wind": "Wind",
         "humidity": "Humidity",
@@ -88,8 +88,8 @@ TEXTS = {
         "title": "🛰️ Wettervorhersage",
         "enter_city": "Geben Sie unten den Stadtnamen ein:",
         "default_city": "Ufa, Baschkortostan",
+        "location_label": "Standort",
         "city_hint": "💡 Geben Sie die Stadt mit Region oder Land an (z. B. „Ufa, Baschkortostan“), da sonst ein anderer Ort gewählt werden kann.",
-        "weather_in": "Wetter in",
         "desc": "Zustand",
         "wind": "Wind",
         "humidity": "Luftfeuchtigkeit",
@@ -181,6 +181,35 @@ def get_weather(location: str, lang: str) -> dict:
     response.raise_for_status() 
     return response.json()
 
+
+@st.cache_data(ttl=900)
+def get_localized_location(location: str, lang: str) -> str:
+    """Возвращает локализованное местоположение до округа."""
+    # OpenCage в wttr.in точнее определяет место без пробелов вокруг запятых.
+    normalized_location = (
+        location.strip().replace(" ,", ",").replace(", ", ",")
+    )
+    encoded_location = quote(normalized_location, safe="")
+    url = f"https://wttr.in/{encoded_location}"
+    params = {"lang": lang, "1Tq": ""}
+    headers = {
+        "User-Agent": "curl/8.0",
+        "Accept": "text/plain",
+    }
+
+    response = requests.get(url, params=params, timeout=10, headers=headers)
+    response.raise_for_status()
+    for line in response.text.splitlines():
+        if "[" not in line or ":" not in line:
+            continue
+        _, _, raw_location = line.partition(":")
+        address = raw_location.split("[", 1)[0].strip()
+        parts = [part.strip() for part in address.split(",") if part.strip()]
+        return ", ".join(parts[:2])
+
+    return ""
+
+
 @st.cache_data(ttl=900)
 def get_weather_image(location: str, lang: str) -> bytes:      
     """Отдельная функция для загрузки PNG-картинки с погодой"""
@@ -196,6 +225,7 @@ def get_weather_image(location: str, lang: str) -> bytes:
         raise ValueError("Сервер не вернул картинку")
 
     return response.content
+
 
 # --Интерфейс--
 selected_lang = st.sidebar.selectbox("Язык / Language", list(LANGUAGES.keys()))
@@ -235,8 +265,14 @@ if location:
         else:
             description = current["weatherDesc"][0]["value"]
 
+        try:
+            exact_location = get_localized_location(location, lang_code)
+        except RequestException:
+            exact_location = ""
+        exact_location = exact_location or location.strip()
+
         # Основной вывод
-        st.markdown(f"## {t['weather_in']} **{location.title()}**")
+        st.markdown(f"## {t['location_label']}: **{exact_location}**")
         st.info(f"**{t['desc']}:** {description}")
 
         # Блок 1: Температура
@@ -266,7 +302,7 @@ if location:
                 img_bytes = get_weather_image(location=location, lang=lang_code)
                 st.image(
                     img_bytes,
-                    caption=f"{t['weather_in']} {location.title()}",
+                    caption=f"{t['location_label']}: {exact_location}",
                     width="stretch",
                 )
             except (ConnectionError, Timeout):
